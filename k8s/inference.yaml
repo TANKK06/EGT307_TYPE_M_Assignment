@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inference
+  namespace: pm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inference
+  template:
+    metadata:
+      labels:
+        app: inference
+    spec:
+      containers:
+      - name: inference
+        image: docker.io/kaykit/pm-inference:v1
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: pm-config
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        env:
+        - name: MODEL_PATH
+          value: /app/model_store/best_model.joblib
+        volumeMounts:
+        - name: model-storage
+          mountPath: /app/model_store
+      volumes:
+      - name: model-storage
+        persistentVolumeClaim:
+          claimName: model-pvc
+      initContainers:
+      - name: seed-model
+        image: docker.io/kaykit/pm-inference:v1
+        imagePullPolicy: Always
+        command:
+        - sh
+        - -c
+        - if [ ! -f /app/model_store/best_model.joblib ]; then echo 'Seeding model into PVC'; cp -v /app/model/best_model.joblib /app/model_store/best_model.joblib; else echo 'Model already present'; fi
+        volumeMounts:
+        - name: model-storage
+          mountPath: /app/model_store
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inference
+  namespace: pm
+spec:
+  selector:
+    app: inference
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP

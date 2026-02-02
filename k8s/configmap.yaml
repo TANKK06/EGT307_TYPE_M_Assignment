@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pm-config
+  namespace: pm
+data:
+  INFERENCE_URL: http://inference:8000/predict
+  INFERENCE_HEALTH_URL: http://inference:8000/health
+  LOGGER_HEALTH_URL: http://logger:8001/health
+  BATCH_PREDICT_URL: http://batch-predict:8002/predict-file
+  BATCH_PREDICT_HEALTH_URL: http://batch-predict:8002/health
+  TRAINER_URL: http://trainer:8003/train
+  TRAINER_HEALTH_URL: http://trainer:8003/health
+  LOGGER_URL: http://logger:8001/log

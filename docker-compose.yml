@@ -1,0 +1,107 @@
+services:
+  db:
+    image: postgres:16
+    container_name: pm_db
+    environment:
+      POSTGRES_DB: pm_db
+      POSTGRES_USER: pm_user
+      POSTGRES_PASSWORD: pm_pass
+    ports:
+    - 5432:5432
+    volumes:
+    - pm_db_data:/var/lib/postgresql/data
+    - ./services/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U pm_user -d pm_db
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  logger:
+    build: ./services/logger
+    container_name: pm_logger
+    environment:
+      DATABASE_URL: postgresql://pm_user:pm_pass@db:5432/pm_db
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+    - 8001:8001
+    image: kaykit/pm-logger:v1
+
+  inference:
+    build: ./services/inference-api
+    container_name: pm_inference
+    environment:
+      LOGGER_URL: http://logger:8001/log
+      MODEL_PATH: /app/model_store/best_model.joblib
+    depends_on:
+      db:
+        condition: service_healthy
+      logger:
+        condition: service_started
+    ports:
+    - 8000:8000
+    image: kaykit/pm-inference:v1
+    volumes:
+    - pm_model_store:/app/model_store
+
+  batch-predict:
+    build:
+      context: .
+      dockerfile: services/batch-predict/Dockerfile
+    container_name: pm_batch_predict
+    environment:
+      INFERENCE_URL: http://inference:8000/predict
+    depends_on:
+      inference:
+        condition: service_started
+    ports:
+    - 8002:8002
+    image: kaykit/pm-batch-predict:v1
+
+  trainer:
+    build:
+      context: .
+      dockerfile: services/trainer/Dockerfile
+    container_name: pm_trainer
+    environment:
+      PYTHONPATH: /app/model
+      ARTIFACT_DIR: /app/model/artifacts
+      MODEL_STORE: /app/model_store
+    volumes:
+    - ./model/artifacts:/app/model/artifacts
+    - pm_model_store:/app/model_store
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+    - 8003:8003
+    image: kaykit/pm-trainer:v1
+
+  dashboard:
+    build: ./services/dashboard
+    container_name: pm_dashboard
+    environment:
+      DATABASE_URL: postgresql://pm_user:pm_pass@db:5432/pm_db
+      INFERENCE_URL: http://inference:8000/predict
+      INFERENCE_HEALTH_URL: http://inference:8000/health
+      LOGGER_HEALTH_URL: http://logger:8001/health
+      BATCH_PREDICT_URL: http://batch-predict:8002/predict-file
+      TRAINER_URL: http://trainer:8003/train
+    depends_on:
+      db:
+        condition: service_healthy
+      inference:
+        condition: service_started
+      batch-predict:
+        condition: service_started
+    ports:
+    - 8501:8501
+    image: kaykit/pm-dashboard:v1
+
+volumes:
+  pm_db_data: null
+  pm_model_store: {}

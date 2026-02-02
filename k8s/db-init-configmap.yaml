@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init-sql
+  namespace: pm
+data:
+  init.sql: "-- services/db/init.sql\n\nCREATE TABLE IF NOT EXISTS predictions (\n\
+    \    id SERIAL PRIMARY KEY,\n    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n\
+    \n    -- Raw payloads (always keep these)\n    request_json JSONB NOT NULL,\n\
+    \    response_json JSONB NOT NULL,\n\n    -- Input features (easy querying + dashboards)\n\
+    \    type TEXT,\n    air_temperature_c DOUBLE PRECISION,\n    process_temperature_c\
+    \ DOUBLE PRECISION,\n    rotational_speed_rpm DOUBLE PRECISION,\n    torque_nm\
+    \ DOUBLE PRECISION,\n    tool_wear_min DOUBLE PRECISION,\n\n    -- Prediction\
+    \ outputs (easy querying)\n    failure_probability DOUBLE PRECISION,\n    predicted_label\
+    \ INTEGER,\n    risk_level TEXT,\n    model_path TEXT\n);\n\n-- Helpful indexes\n\
+    CREATE INDEX IF NOT EXISTS idx_predictions_created_at ON predictions (created_at\
+    \ DESC);\nCREATE INDEX IF NOT EXISTS idx_predictions_label ON predictions (predicted_label);\n\
+    CREATE INDEX IF NOT EXISTS idx_predictions_risk ON predictions (risk_level);\n\
+    CREATE INDEX IF NOT EXISTS idx_predictions_type ON predictions (type);\n"

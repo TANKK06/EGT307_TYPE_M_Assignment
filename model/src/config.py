@@ -1,35 +1,41 @@
+# model/src/config.py
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
 @dataclass(frozen=True)
 class Config:
-    # Data
-    data_path: Path = Path("model/data/Machine_Failure.csv")
-    target_col: str = "Target"
+    # ---------- Paths ----------
+    data_path: Path = Path(os.getenv("DATA_PATH", "model/data/Machine_Failure.csv"))
+    artifacts_dir: Path = Path(os.getenv("ARTIFACT_DIR", "model/artifacts"))
 
-    # Split
-    test_size: float = 0.2
-    seed: int = 42
+    # ---------- Problem setup ----------
+    target_col: str = os.getenv("TARGET_COL", "Target")
 
-    # Columns
-    cat_cols: tuple[str, ...] = ("Type",)
-    # IMPORTANT: drop leakage + identifiers
-    drop_cols: tuple[str, ...] = ("UDI", "Product ID", "Failure Type")
+    # Use default_factory for lists (required by dataclasses)
+    cat_cols: list[str] = field(default_factory=lambda: ["Type"])
+    drop_cols: list[str] = field(
+        default_factory=lambda: [
+            "UDI",
+            "Product ID",
+            "Product_ID",
+            "product_id",
+            "id",
+        ]
+    )
 
-    # Model selection metric (imbalance-friendly)
-    # options: "pr_auc", "f1_macro", "f1_failure", "recall_failure", "precision_failure"
-    select_metric: str = "pr_auc"
+    # ---------- Split / seed ----------
+    test_size: float = float(os.getenv("TEST_SIZE", "0.2"))
+    seed: int = int(os.getenv("SEED", "42"))
 
-    # SMOTE
-    smote_k_neighbors: int = 5
-    smote_strategy: str | float | dict = "auto"
+    # ---------- SMOTE ----------
+    smote_k_neighbors: int = int(os.getenv("SMOTE_K", "5"))
+    smote_strategy: str | None = os.getenv("SMOTE_STRATEGY", None)  # e.g. "auto"
 
-    # Fine-tuning
-    cv_folds: int = 5
-    n_iter_tune: int = 25
-
-    # Output
-    artifacts_dir: Path = Path("model/artifacts")
+    # ---------- Model selection / tuning ----------
+    select_metric: str = os.getenv("SELECT_METRIC", "f1_macro")
+    cv_folds: int = int(os.getenv("CV_FOLDS", "5"))
+    n_iter_tune: int = int(os.getenv("N_ITER_TUNE", "30"))

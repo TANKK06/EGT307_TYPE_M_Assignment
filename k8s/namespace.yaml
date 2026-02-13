@@ -1,11 +1,4 @@
-# -----------------------------
-# Namespace: creates a separate "pm" workspace in the Kubernetes cluster
-# Why we use it:
-# - Keeps all project resources grouped together (Deployments, Services, PVCs, etc.)
-# - Makes it easier to manage (apply/delete/list) without affecting other namespaces
-# - Helps avoid name conflicts with other apps
-# -----------------------------
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: pm   # All your project resources are deployed into this namespace
+  name: pm                      # Creates a dedicated namespace for your project (pm)

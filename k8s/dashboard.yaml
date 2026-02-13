@@ -1,75 +1,63 @@
-# -----------------------------
-# Deployment: runs the dashboard UI at Streamlit as a managed Pod
-# -----------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dashboard                 # Name of the Deployment
-  namespace: pm                   # Deploy into the pm namespace
+  name: dashboard                  # Deployment name for the UI/dashboard component
+  namespace: pm                    # Namespace this dashboard runs in
 spec:
-  replicas: 3                     # Number of dashboard Pods to run
+  replicas: 1                      # Run 1 copy of the dashboard pod
   selector:
     matchLabels:
-      app: dashboard              # Must match the Pod label below
+      app: dashboard               # Must match the pod template labels
   template:
     metadata:
       labels:
-        app: dashboard            # Label used by Service selector
+        app: dashboard             # Label used by the Service to target these pods
     spec:
       containers:
-      - name: dashboard           # Container name inside the Pod
-        image: pm-dashboard:v1   # Dashboard image (Streamlit app)
-        imagePullPolicy: Always   # Always pull latest tag version from registry
+      - name: dashboard            # Container name inside the pod
+        image: docker.io/kaykit/pm-dashboard:v1   # Docker image for the dashboard (Streamlit)
+        imagePullPolicy: IfNotPresent    # Always pull latest image for this tag (good for dev)
         ports:
-        - containerPort: 8501     # Streamlit default port inside container
+        - containerPort: 8501      # Streamlit default port inside the container
 
-        # Load ALL non-secret environment variables from pm-config ConfigMap
+        # Load non-sensitive environment variables from ConfigMap
         envFrom:
         - configMapRef:
-            name: pm-config
+            name: pm-config        # ConfigMap containing service URLs, etc.
 
-        # Load sensitive environment variable from Kubernetes Secret (pm-secrets)
-        # This keeps DB credentials out of ConfigMaps and YAML repo history
+        # Load sensitive environment variables from Secret
         env:
-        - name: DATABASE_URL
+        - name: DATABASE_URL       # Environment variable name used by the dashboard app
           valueFrom:
             secretKeyRef:
-              name: pm-secrets    # Secret resource name
-              key: DATABASE_URL   # Key inside the Secret
+              name: pm-secrets     # Secret name that stores DB connection string
+              key: DATABASE_URL    # Key inside the Secret
 
-        # Readiness probe:
-        # Pod is marked "Ready" only when the Streamlit health endpoint responds OK.
-        # If not ready, Service will not route traffic to it.
+        # Readiness probe: when successful, K8s will send traffic to this pod
         readinessProbe:
           httpGet:
-            path: /_stcore/health # Streamlit internal health endpoint
+            path: /_stcore/health  # Streamlit health endpoint
             port: 8501
-          initialDelaySeconds: 10 # Wait 10s before first readiness check
-          periodSeconds: 10       # Check every 10s
+          initialDelaySeconds: 10  # Wait 10s before first check
+          periodSeconds: 10        # Check every 10s
 
-        # Liveness probe:
-        # If the app gets stuck and stops responding, Kubernetes will restart the container.
+        # Liveness probe: if this fails repeatedly, K8s restarts the container
         livenessProbe:
           httpGet:
             path: /_stcore/health
             port: 8501
-          initialDelaySeconds: 30 # Give more startup time before liveness checks
-          periodSeconds: 20       # Check every 20s
-
+          initialDelaySeconds: 30  # Wait longer before liveness checks
+          periodSeconds: 20        # Check every 20s
 ---
-# -----------------------------
-# Service: internal stable access to dashboard Pods via DNS name "dashboard"
-# (ClusterIP = only reachable inside the cluster unless port-forward/ingress used)
-# -----------------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: dashboard                 # Service name (DNS: dashboard.pm.svc.cluster.local)
+  name: dashboard                  # Internal service name (DNS: dashboard.pm.svc.cluster.local)
   namespace: pm
 spec:
   selector:
-    app: dashboard                # Routes traffic to Pods with this label
+    app: dashboard                 # Routes traffic to pods labeled app=dashboard
   ports:
-  - port: 8501                    # Service port
-    targetPort: 8501              # Container port to forward to
-  type: ClusterIP                 # Internal-only access (use port-forward or Ingress for external)
+  - port: 8501                     # Service port inside the cluster
+    targetPort: 8501               # Forward to container port 8501
+  type: ClusterIP                  # Internal-only service (use Ingress/port-forward to access externally)

@@ -1,29 +1,23 @@
-# Dockerfile for the Logger service (FastAPI)
-# This service receives logs from inference and writes them to Postgres.
-
+# Use a lightweight Python base image
 FROM python:3.11-slim
 
-# Set working directory inside container
+# Set the working directory inside the container
 WORKDIR /app
 
-# -----------------------------
-# Install dependencies
-# -----------------------------
-# Copy requirements first so Docker can cache dependency installation.
+# ---- Install dependencies ----
+# Copy requirements first so Docker can cache the dependency layer
 COPY requirements.txt /app/requirements.txt
+
+# Install Python packages listed in requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# -----------------------------
-# Copy application code
-# -----------------------------
-# Copy the FastAPI logger app package (contains main.py, db.py, schemas.py, etc.)
+# ---- Copy application code ----
+# Copy the logger service source code into the container
 COPY app /app/app
 
-# Document the port the service listens on
-EXPOSE 8001
+# ---- Runtime settings ----
+# Logger API port
+EXPOSE 8001                          
 
-# Start FastAPI with uvicorn
-# app.main:app means:
-#   - module: app/main.py
-#   - FastAPI instance variable: app
+# Start the FastAPI app using Uvicorn
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001"]

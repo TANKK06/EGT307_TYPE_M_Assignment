@@ -1,92 +1,79 @@
-# -----------------------------
-# Deployment: runs the trainer service (retrain model and save it into the model PVC)
-# This is a state-changing service because it writes new model files into shared storage.
-# -----------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: trainer                    # Deployment name
-  namespace: pm                    # Namespace to deploy into
+  name: trainer
+  namespace: pm
 spec:
-  replicas: 1                      # Keep 1 to avoid multiple training jobs overwriting each other
+  replicas: 1
   selector:
     matchLabels:
-      app: trainer                 # Must match Pod template labels
+      app: trainer
   template:
     metadata:
       labels:
-        app: trainer               # Label used by Service selector
+        app: trainer
     spec:
       containers:
-      - name: trainer              # Container name
-        image: pm-trainer:v1   # Trainer Docker image
-        imagePullPolicy: Always    # Always pull image (useful during development)
+      - name: trainer
+        image: docker.io/kaykit/pm-trainer:v1
+        imagePullPolicy: IfNotPresent   # Uses local image if present; won’t force pull from Docker Hub
         ports:
-        - containerPort: 8003      # Trainer API listens on 8003 inside the container
+        - containerPort: 8003
 
-        # Load non-secret environment variables (service URLs) from ConfigMap
+        # Load non-sensitive config (service URLs, etc.)
         envFrom:
         - configMapRef:
             name: pm-config
 
-        # Readiness probe:
-        # Pod becomes Ready only when /health is successful.
+        # App-specific env vars
+        env:
+        - name: MODEL_STORE
+          value: /app/model_store       # PVC mount path inside container
+        - name: SMOTE_STRATEGY
+          value: "auto"                 # ✅ prevents SMOTE sampling_strategy=None crash
+
+        # ✅ Readiness probe only (trainer can be slow during training)
         readinessProbe:
           httpGet:
             path: /health
             port: 8003
-          initialDelaySeconds: 5   # Wait 5s before first readiness check
-          periodSeconds: 5         # Check every 5s
+          initialDelaySeconds: 20       # give time to start
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 10
 
-        # Liveness probe:
-        # If /health stops responding, Kubernetes restarts the container.
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8003
-          initialDelaySeconds: 15  # Wait longer before liveness checks
-          periodSeconds: 10        # Check every 10s
+        # ❌ REMOVE livenessProbe
+        # Liveness probes restart containers. Training can block the server and trigger false restarts.
 
-        # Resource requests/limits:
-        # Training is CPU/memory heavier, so limits are higher than inference.
+        # ✅ More realistic resources for ML training (prevents Exit 137)
         resources:
           requests:
-            cpu: 100m              # Scheduler baseline CPU request
-            memory: 256Mi          # Scheduler baseline memory request
+            cpu: 500m
+            memory: 1Gi
           limits:
-            cpu: 1000m             # Up to 1 CPU for training
-            memory: 1Gi            # Up to 1Gi RAM
+            cpu: "2"
+            memory: 4Gi
 
-        # MODEL_STORE tells trainer where to save the trained model artifacts
-        env:
-        - name: MODEL_STORE
-          value: /app/model_store
-
-        # Mount the PVC so trainer can write model files that inference can read later
+        # Mount shared model storage (trainer writes model, inference reads it)
         volumeMounts:
         - name: model-storage
           mountPath: /app/model_store
 
-      # Volume definition: connects model-storage to the PVC named model-pvc
       volumes:
       - name: model-storage
         persistentVolumeClaim:
           claimName: model-pvc
 
 ---
-# -----------------------------
-# Service: stable internal DNS name "trainer" for other Pods to call
-# Example: http://trainer:8003/train
-# -----------------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: trainer                    # Service name (DNS: trainer.pm.svc.cluster.local)
+  name: trainer
   namespace: pm
 spec:
   selector:
-    app: trainer                   # Routes traffic to Pods with label app=trainer
+    app: trainer
   ports:
-  - port: 8003                     # Service port
-    targetPort: 8003               # Container port
-  type: ClusterIP                  # Internal-only service
+  - port: 8003
+    targetPort: 8003
+  type: ClusterIP

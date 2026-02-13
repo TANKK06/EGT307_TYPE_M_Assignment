@@ -1,55 +1,36 @@
--- services/db/init.sql
--- This SQL file runs automatically when the Postgres container starts for the first time
--- (mounted into /docker-entrypoint-initdb.d/).
--- It creates the table used to store prediction logs and adds indexes for faster queries.
-
--- Create a table to store every prediction request + response and some extracted fields
+-- Create the main table for storing prediction logs (only creates it if it doesn't exist)
 CREATE TABLE IF NOT EXISTS predictions (
-    -- Unique row ID for each prediction log entry
-    id SERIAL PRIMARY KEY,
+    id SERIAL PRIMARY KEY,                            -- Auto-incrementing unique ID for each log row
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),     -- Timestamp (timezone-aware), defaults to current time
 
-    -- Timestamp when the log was created (timezone-aware)
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Raw payloads (always keep these for debugging/auditing/replay)
+    request_json JSONB NOT NULL,                       -- Full input payload sent to inference
+    response_json JSONB NOT NULL,                      -- Full response returned by inference
 
-    -- -----------------------------
-    -- Raw payloads (keep full traceability)
-    -- -----------------------------
-    -- Original request JSON sent to inference/logger
-    request_json JSONB NOT NULL,
+    -- Input features (stored as columns for fast filtering/analytics)
+    type TEXT,                                         -- Categorical: product/machine type
+    air_temperature_c DOUBLE PRECISION,                -- Air temperature in Celsius
+    process_temperature_c DOUBLE PRECISION,            -- Process temperature in Celsius
+    rotational_speed_rpm DOUBLE PRECISION,             -- Rotational speed in RPM
+    torque_nm DOUBLE PRECISION,                        -- Torque in Newton-meters
+    tool_wear_min DOUBLE PRECISION,                    -- Tool wear in minutes
 
-    -- Full response JSON returned by inference
-    response_json JSONB NOT NULL,
-
-    -- -----------------------------
-    -- Extracted input features (for easy filtering/analysis in the dashboard)
-    -- -----------------------------
-    type TEXT,                                   -- machine type (L/M/H)
-    air_temperature_c DOUBLE PRECISION,          -- air temp in °C
-    process_temperature_c DOUBLE PRECISION,      -- process temp in °C
-    rotational_speed_rpm DOUBLE PRECISION,       -- RPM
-    torque_nm DOUBLE PRECISION,                  -- torque in Nm
-    tool_wear_min DOUBLE PRECISION,              -- tool wear in minutes
-
-    -- -----------------------------
-    -- Prediction outputs (for reporting + monitoring model performance)
-    -- -----------------------------
-    failure_probability DOUBLE PRECISION,        -- probability of failure (0..1)
-    predicted_label INTEGER,                     -- predicted class (0/1)
-    risk_level TEXT,                             -- e.g., low/medium/high
-    model_path TEXT                              -- which model version/file was used
+    -- Prediction outputs (stored as columns for fast dashboards)
+    failure_probability DOUBLE PRECISION,              -- Model probability of failure (0.0 to 1.0)
+    predicted_label INTEGER,                           -- Predicted class label (0/1)
+    risk_level TEXT,                                   -- Human-friendly risk band (e.g., low/med/high)
+    model_path TEXT                                    -- Which model file produced this prediction
 );
 
--- -----------------------------
--- Indexes (speed up common queries)
--- -----------------------------
--- Used by dashboard "recent logs" query sorting by newest first
-CREATE INDEX IF NOT EXISTS idx_predictions_created_at ON predictions (created_at DESC);
+-- Helpful indexes (speed up common queries in the dashboard)
+CREATE INDEX IF NOT EXISTS idx_predictions_created_at
+  ON predictions (created_at DESC);                    -- Fast "latest logs" queries
 
--- Used when filtering by predicted_label (e.g., show failures only)
-CREATE INDEX IF NOT EXISTS idx_predictions_label ON predictions (predicted_label);
+CREATE INDEX IF NOT EXISTS idx_predictions_label
+  ON predictions (predicted_label);                    -- Fast filtering by predicted class (0/1)
 
--- Used when filtering by risk_level (e.g., show only "high" risk)
-CREATE INDEX IF NOT EXISTS idx_predictions_risk ON predictions (risk_level);
+CREATE INDEX IF NOT EXISTS idx_predictions_risk
+  ON predictions (risk_level);                         -- Fast filtering by risk level
 
--- Used when filtering by machine type (L/M/H)
-CREATE INDEX IF NOT EXISTS idx_predictions_type ON predictions (type);
+CREATE INDEX IF NOT EXISTS idx_predictions_type
+  ON predictions (type);                               -- Fast filtering/grouping by Type

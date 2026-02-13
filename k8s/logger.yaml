@@ -1,74 +1,63 @@
-# -----------------------------
-# Deployment: runs the logger service (stores requests + predictions into DB)
-# -----------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: logger                    # Deployment name
-  namespace: pm                    # Deploy into pm namespace
+  name: logger                     # Deployment name for the logging microservice
+  namespace: pm                    # Namespace where logger runs
 spec:
-  replicas: 1                      # 1 instance is usually enough for logging (can scale if needed)
+  replicas: 1                       # Number of logger pods to run
   selector:
     matchLabels:
-      app: logger                  # Must match Pod template labels
+      app: logger                   # Must match pod template labels
   template:
     metadata:
       labels:
-        app: logger                # Label used by Service selector
+        app: logger                 # Label used by Service to select logger pods
     spec:
       containers:
-      - name: logger               # Container name
-        image: pm-logger:v1   # Logger service Docker image
-        imagePullPolicy: Always    # Always pull image from registry
+      - name: logger                # Container name inside the pod
+        image: docker.io/kaykit/pm-logger:v1   # Docker image for logger service
+        imagePullPolicy: IfNotPresent     # Always pull image (useful during development)
         ports:
-        - containerPort: 8001      # App listens on port 8001 inside container
+        - containerPort: 8001       # Logger API listens on port 8001
 
-        # Load non-secret environment variables (service URLs) from ConfigMap
+        # Load non-sensitive configuration from ConfigMap (service URLs, etc.)
         envFrom:
         - configMapRef:
             name: pm-config
 
-        # Load sensitive DB connection string from Secret (pm-secrets)
+        # Load sensitive DB connection string from Secret
         env:
-        - name: DATABASE_URL
+        - name: DATABASE_URL        # Environment variable used by the logger app to connect to DB
           valueFrom:
             secretKeyRef:
-              name: pm-secrets     # Secret containing DB credentials/URL
-              key: DATABASE_URL    # Key in Secret
+              name: pm-secrets      # Secret name
+              key: DATABASE_URL     # Key within the Secret
 
-        # Readiness probe:
-        # Pod becomes Ready only when /health returns OK.
-        # If not Ready, Service will not send traffic to it.
+        # Readiness probe: pod receives traffic only when health endpoint returns 200 OK
         readinessProbe:
           httpGet:
-            path: /health
+            path: /health           # Health endpoint implemented by logger service
             port: 8001
-          initialDelaySeconds: 5   # Wait 5s before first readiness check
-          periodSeconds: 5         # Check every 5s
+          initialDelaySeconds: 5    # Wait 5s after start before checking
+          periodSeconds: 5          # Check every 5s
 
-        # Liveness probe:
-        # If /health stops responding, Kubernetes restarts the container.
+        # Liveness probe: restart container if health endpoint fails repeatedly
         livenessProbe:
           httpGet:
             path: /health
             port: 8001
-          initialDelaySeconds: 15  # Wait longer before liveness checks
-          periodSeconds: 10        # Check every 10s
-
+          initialDelaySeconds: 15   # Give app time to start before liveness checks
+          periodSeconds: 10         # Check every 10s
 ---
-# -----------------------------
-# Service: stable internal DNS name "logger" for other Pods to call
-# Example: http://logger:8001/health or http://logger:8001/log
-# -----------------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: logger                    # Service name (DNS: logger.pm.svc.cluster.local)
+  name: logger                     # Internal Service name (DNS: logger.pm.svc.cluster.local)
   namespace: pm
 spec:
   selector:
-    app: logger                   # Routes traffic to Pods with label app=logger
+    app: logger                    # Routes to pods labeled app=logger
   ports:
-  - port: 8001                    # Service port
-    targetPort: 8001              # Forward to container port 8001
-  type: ClusterIP                 # Internal-only service (not exposed externally)
+  - port: 8001                     # Service port inside the cluster
+    targetPort: 8001               # Container port
+  type: ClusterIP                  # Internal-only service

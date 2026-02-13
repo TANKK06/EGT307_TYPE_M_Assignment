@@ -1,37 +1,23 @@
-# Dockerfile for the Streamlit Dashboard service
-# Purpose:
-# - Install Python dependencies
-# - Copy the Streamlit app (app.py) and UI assets (ui/ folder)
-# - Run Streamlit on port 8501 so it can be accessed from the host / Kubernetes service
-
+# Use a lightweight Python base image
 FROM python:3.11-slim
 
 # Set the working directory inside the container
 WORKDIR /app
 
-# -----------------------------
-# Install dependencies
-# -----------------------------
-# Copy requirements first so Docker can cache the pip install layer.
-# If your code changes but requirements.txt stays the same, Docker won't reinstall packages.
+# ---- Install dependencies ----
+# Copy requirements first so Docker can cache the dependency layer
 COPY requirements.txt /app/requirements.txt
+
+# Install Python packages listed in requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# -----------------------------
-# Copy application code + static assets
-# -----------------------------
-# Copy the main Streamlit script
+# ---- Copy application code ----
+# Copy the Streamlit dashboard script into the container
 COPY app.py /app/app.py
 
-# Copy additional UI files (images, css, components, etc.)
-COPY ui /app/ui
-
-# Document the Streamlit port (Compose/K8s still maps it explicitly)
+# ---- Runtime settings ----
+# Streamlit runs on port 8501 by default
 EXPOSE 8501
 
-# -----------------------------
-# Start Streamlit server
-# -----------------------------
-# --server.address=0.0.0.0 makes it reachable outside the container
-# --server.port=8501 matches the containerPort/Service port used in your deployment
+# Start the Streamlit app and listen on all interfaces so Kubernetes can reach it
 CMD ["streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.port=8501"]

@@ -1,8 +1,3 @@
-# model/src/config.py
-# Central configuration for the ML pipeline.
-# This file defines default paths + training settings, and allows overriding via environment variables
-# (useful for Docker/Kubernetes where you pass configs through env vars).
-
 from __future__ import annotations
 
 import os
@@ -12,66 +7,55 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Config:
-    # --------------------
-    # Paths (file locations)
-    # --------------------
-    # Path to the training CSV dataset.
-    # Can be overridden with env var DATA_PATH (e.g., in Docker/K8s).
+    # ---------- Paths ----------
+    # Path to the training dataset CSV (can be overridden by env var DATA_PATH)
+    # Using Path makes file handling (join/exists/resolve) easier than plain strings.
     data_path: Path = Path(os.getenv("DATA_PATH", "model/data/Machine_Failure.csv"))
 
-    # Directory to store generated artifacts (trained model, encoders, metrics, etc.).
-    # Can be overridden with env var ARTIFACT_DIR.
-    artifacts_dir: Path = Path(os.getenv("ARTIFACT_DIR", "model/artifacts"))
+    # Directory where training outputs (models, metrics, plots, etc.) are stored
+    # Override with env var ARTIFACT_DIR if needed.
+    artifacts_dir: Path = Path(os.getenv("ARTIFACT_DIR", "services/inference-api/model"))
 
-    # --------------------
-    # Problem setup
-    # --------------------
-    # Target column name (the label we want to predict).
-    # Override with TARGET_COL if your dataset uses a different column name.
+    # ---------- Problem setup ----------
+    # Name of the target/label column in the dataset
     target_col: str = os.getenv("TARGET_COL", "Target")
 
-    # Categorical columns (need encoding before training).
-    # Use default_factory to avoid the "mutable default" dataclass issue.
+    # Categorical columns that need encoding (e.g., OneHotEncoder)
+    # default_factory is required for mutable defaults in dataclasses.
     cat_cols: list[str] = field(default_factory=lambda: ["Type"])
 
-    # Columns to drop before training:
-    # - IDs are not useful features and may leak information
+    # Columns to drop before training (IDs / non-predictive identifiers)
+    # Includes multiple variants in case dataset uses different naming.
     drop_cols: list[str] = field(
         default_factory=lambda: [
             "UDI",
             "Product ID",
+            "Product_ID",
+            "product_id",
+            "id",
         ]
     )
 
-    # --------------------
-    # Train/test split + reproducibility
-    # --------------------
-    # Fraction of dataset used for testing/validation.
+    # ---------- Split / seed ----------
+    # Proportion of data used for testing (e.g., 0.2 = 20%)
     test_size: float = float(os.getenv("TEST_SIZE", "0.2"))
 
-    # Random seed so results are repeatable across runs.
+    # Random seed to make splits and model training reproducible
     seed: int = int(os.getenv("SEED", "42"))
 
-    # --------------------
-    # SMOTE (handling class imbalance)
-    # --------------------
-    # SMOTE creates synthetic samples for the minority class.
-    # k_neighbors controls how SMOTE generates synthetic points.
+    # ---------- SMOTE ----------
+    # SMOTE parameters for handling class imbalance
     smote_k_neighbors: int = int(os.getenv("SMOTE_K", "5"))
 
-    # Strategy for SMOTE (e.g., "auto", "minority", or custom ratios).
-    # None means "use library default" / disable custom strategy.
-    smote_strategy: str | None = os.getenv("SMOTE_STRATEGY", None)  # e.g. "auto"
+    # SMOTE strategy (None = use library default; e.g., "auto", "minority", etc.)
+    smote_strategy: str | None = os.getenv("SMOTE_STRATEGY", None)
 
-    # --------------------
-    # Model selection / hyperparameter tuning
-    # --------------------
-    # Metric used to select the "best" model during tuning/CV.
-    # f1_macro is good when classes are imbalanced (treats classes equally).
+    # ---------- Model selection / tuning ----------
+    # Metric used to select the "best" model during evaluation/tuning
     select_metric: str = os.getenv("SELECT_METRIC", "f1_macro")
 
-    # Number of folds for cross-validation (higher = more stable, slower).
+    # Number of cross-validation folds
     cv_folds: int = int(os.getenv("CV_FOLDS", "5"))
 
-    # Number of random search iterations (higher = better chance of good params, slower).
+    # Number of random search iterations for hyperparameter tuning
     n_iter_tune: int = int(os.getenv("N_ITER_TUNE", "30"))

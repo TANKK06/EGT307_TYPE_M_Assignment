@@ -1,30 +1,19 @@
-# -----------------------------
-# HorizontalPodAutoscaler (HPA): automatically scales the "inference" Deployment
-# based on CPU usage.
-# Requires Metrics Server installed in the cluster to work.
-# -----------------------------
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: inference-hpa            # Name of the HPA resource
-  namespace: pm                  # Namespace where HPA is created
+  name: inference-hpa              # HPA name (autoscaler for inference deployment)
+  namespace: pm                    # Namespace where the inference deployment lives
 spec:
-  # This tells the HPA which workload to scale up/down
   scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: inference              # Target Deployment name to autoscale
-
-  minReplicas: 1                 # Minimum number of Pods (won't scale below this)
-  maxReplicas: 5                 # Maximum number of Pods (won't scale above this)
-
-  # Scaling rule: watch CPU usage across Pods
+    apiVersion: apps/v1            # API version of the target resource
+    kind: Deployment               # We are scaling a Deployment
+    name: inference                # Deployment name to scale
+  minReplicas: 1                   # Minimum number of inference pods
+  maxReplicas: 5                   # Maximum number of inference pods
   metrics:
-  - type: Resource
+  - type: Resource                 # Scale based on a resource metric
     resource:
-      name: cpu
+      name: cpu                    # Use CPU utilization
       target:
-        type: Utilization
-        averageUtilization: 50   # Target average CPU usage (% of requested CPU)
-                                # If average > 50%, HPA scales up
-                                # If average < 50%, HPA may scale down
+        type: Utilization          # Target is % of requested CPU (IMPORTANT)
+        averageUtilization: 50     # Try to keep average CPU around 50%

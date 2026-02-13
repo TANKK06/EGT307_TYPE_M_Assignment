@@ -1,30 +1,17 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
 from typing import Any, Dict, Optional
+from pydantic import BaseModel
 
 
 class LogRequest(BaseModel):
     """
-    Schema for the logger service POST /log endpoint.
-
-    Why we use this model:
-    - Validates incoming JSON structure (must contain request + response objects)
-    - Provides clear API documentation in FastAPI /docs
-    - Keeps inference/logger contract consistent
+    Request schema for the logger service (/log).
 
     Fields:
-        request:
-            The original input payload sent to the inference API /predict endpoint.
-            Example keys: Type, Air_temperature_C, Process_temperature_C, ...
-
-        response:
-            The prediction output returned by inference.
-            Example keys: failure_probability, predicted_label, risk_level
-
-        model_path:
-            Optional string indicating which model file/version was used.
-            This is useful for tracking model updates over time (retraining).
+        request: Original inference request payload (input features).
+        response: Inference response payload (probability/label/risk).
+        model_path: Optional path/name of the model artifact used for prediction.
     """
     request: Dict[str, Any]
     response: Dict[str, Any]

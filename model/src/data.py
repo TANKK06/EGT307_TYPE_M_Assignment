@@ -6,23 +6,18 @@ import pandas as pd
 
 def load_raw(csv_path: str | Path) -> pd.DataFrame:
     """
-    Load the raw predictive maintenance dataset from a CSV file.
+    Load the raw predictive maintenance CSV into a pandas DataFrame.
 
     Args:
-        csv_path: Path to the CSV file. Accepts either a string or a pathlib.Path.
-
-    Returns:
-        A pandas DataFrame containing the raw data (no cleaning/processing done here).
+        csv_path: Path to the CSV file (string or pathlib.Path).
 
     Raises:
-        FileNotFoundError: If the provided CSV path does not exist.
+        FileNotFoundError: If the CSV file does not exist at the given path.
+
+    Returns:
+        A pandas DataFrame containing the raw dataset.
     """
-    # Convert input to Path object so we can use Path utilities (exists(), etc.)
-    csv_path = Path(csv_path)
-
-    # Fail fast with a clear error message if the file path is wrong
-    if not csv_path.exists():
+    csv_path = Path(csv_path)              # Convert input to Path (handles str or Path)
+    if not csv_path.exists():              # Validate the file exists before reading
         raise FileNotFoundError(f"CSV not found: {csv_path}")
-
-    # Read the CSV into a DataFrame and return it
-    return pd.read_csv(csv_path)
+    return pd.read_csv(csv_path)           # Read CSV into DataFrame

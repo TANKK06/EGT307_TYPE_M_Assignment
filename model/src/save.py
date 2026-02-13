@@ -8,59 +8,49 @@ import joblib
 
 def save_finetuned_model(out_dir: str | Path, model) -> Path:
     """
-    Save ONLY the fine-tuned model pipeline (legacy/backwards-compatible function).
-
-    Why this exists:
-    - Some older parts of the project (or teammates' code) may expect only a single output file.
-    - This function keeps that behavior stable while the newer save_artifacts() saves more.
+    Backwards-compatible helper: save ONLY the fine-tuned model pipeline.
 
     Args:
-        out_dir: Folder where the model file should be saved.
-        model: Trained sklearn Pipeline (preprocessor + SMOTE + classifier).
+        out_dir: Output directory to write the model into.
+        model: Trained model/pipeline object (e.g., sklearn Pipeline).
 
     Returns:
-        Path to the saved model file: best_model.joblib
+        Path to the saved model file (best_model.joblib).
     """
-    # Ensure out_dir is a Path object and exists
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(out_dir)                   # accept str or Path
+    out_dir.mkdir(parents=True, exist_ok=True)  # create folder if missing
 
-    # Save the trained pipeline using joblib (recommended for sklearn objects)
-    path = out_dir / "best_model.joblib"
-    joblib.dump(model, path)
-
+    path = out_dir / "best_model.joblib"      # standard filename used across services
+    joblib.dump(model, path)                  # serialize model to disk
     return path
 
 
 def save_artifacts(out_dir: str | Path, model, report: Dict[str, Any]) -> Tuple[Path, Path]:
     """
-    Save ALL artifacts needed for deployment + reporting.
+    Recommended: save BOTH model + metrics/report for deployment + documentation.
 
-    What gets written:
-      1) best_model.joblib  -> the trained model pipeline used by inference service
-      2) metrics.json       -> a detailed report (baseline results, tuned metrics, settings)
+    Writes:
+      - best_model.joblib  (trained model/pipeline)
+      - metrics.json       (evaluation + config details for your report)
 
     Args:
-        out_dir: Folder where artifacts will be saved.
-        model: Trained sklearn Pipeline.
-        report: Dictionary containing metrics + metadata (will be saved as JSON).
+        out_dir: Output directory for artifacts.
+        model: Trained model/pipeline object to save.
+        report: Dict containing metrics, parameters, and run metadata.
 
     Returns:
         (model_path, metrics_path)
     """
-    # Ensure output folder exists
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # File locations
-    model_path = out_dir / "best_model.joblib"
-    metrics_path = out_dir / "metrics.json"
+    model_path = out_dir / "best_model.joblib"   # model artifact used by inference service
+    metrics_path = out_dir / "metrics.json"      # JSON metrics for reporting
 
-    # Save model pipeline (binary)
+    # Save model
     joblib.dump(model, model_path)
 
-    # Save report/metrics (human-readable JSON)
-    # indent=2 makes it easier for teammates to read / debug
+    # Save report/metrics as readable JSON (indent makes it easy to inspect)
     metrics_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
     return model_path, metrics_path

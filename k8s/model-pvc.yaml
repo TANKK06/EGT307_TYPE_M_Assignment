@@ -1,16 +1,11 @@
-# -----------------------------
-# PersistentVolumeClaim (PVC): requests persistent storage for the ML model file(s)
-# This is used by services like inference/trainer to store and read the trained model.
-# The model stays even if Pods restart (as long as PVC is not deleted).
-# -----------------------------
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: model-pvc                # PVC name (referenced by inference/trainer Deployments)
-  namespace: pm
+  name: model-pvc                 # PVC name (used by inference/trainer to store the model)
+  namespace: pm                   # Namespace where this PVC is created
 spec:
   accessModes:
-  - ReadWriteOnce                # Can be mounted by ONE node at a time (common default)
+  - ReadWriteOnce                 # Can be mounted read-write by one node at a time
   resources:
     requests:
-      storage: 1Gi               # Request 1Gi persistent storage for model artifacts
+      storage: 1Gi                # Requested persistent storage size for model files

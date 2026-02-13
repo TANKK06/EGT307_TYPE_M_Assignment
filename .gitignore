@@ -1,3 +1,5 @@
 EGT307
 model/artifacts/*.joblib
 model/artifacts/*.json
+__pycache__/
+*.pyc

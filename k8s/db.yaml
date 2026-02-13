@@ -1,113 +1,91 @@
-# -----------------------------
-# PersistentVolumeClaim (PVC): requests persistent storage for Postgres data
-# Data will survive Pod restarts (as long as the PVC is not deleted).
-# -----------------------------
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: db-pvc                 # PVC name (referenced by the DB Deployment)
-  namespace: pm
+  name: db-pvc                     # PVC name used by the Postgres pod
+  namespace: pm                    # Namespace where the PVC exists
 spec:
   accessModes:
-  - ReadWriteOnce              # Can be mounted by ONE node at a time (typical for Postgres)
+  - ReadWriteOnce                  # One node can mount read-write at a time
   resources:
     requests:
-      storage: 2Gi             # Request 2Gi of persistent storage from the cluster
-
+      storage: 2Gi                 # Requested storage size
 ---
-# -----------------------------
-# Deployment: runs a Postgres database Pod
-# NOTE: In production, Postgres is usually better as a StatefulSet, but Deployment works for assignments/labs.
-# -----------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: db                     # Deployment name
+  name: db                         # Deployment name for Postgres
   namespace: pm
 spec:
-  replicas: 1                  # One Postgres instance (DB should not be scaled like stateless apps)
+  replicas: 1                      # Run a single Postgres pod
   selector:
     matchLabels:
-      app: db                  # Must match labels in the Pod template
+      app: db                      # Must match pod labels
   template:
     metadata:
       labels:
-        app: db                # Label applied to the DB Pod
+        app: db                    # Used by the Service selector
     spec:
       containers:
-      - name: postgres         # Container name
-        image: postgres:16     # Official Postgres image (version 16)
+      - name: postgres             # Container name
+        image: postgres:16         # Postgres image version
         ports:
-        - containerPort: 5432  # Postgres default port
+        - containerPort: 5432      # Default Postgres port inside container
 
-        # Environment variables used by the Postgres image to initialize the database
-        # These only fully apply on FIRST initialization (when the data directory is empty).
+        # Postgres environment variables (used by the official entrypoint)
         env:
         - name: POSTGRES_DB
-          value: pm_db         # Default database name to create
+          value: pm_db             # DB name created on first initialization
         - name: POSTGRES_USER
-          value: pm_user       # Default user to create
+          value: pm_user           # DB username created on first initialization
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: pm-secrets         # Kubernetes Secret containing sensitive values
-              key: POSTGRES_PASSWORD   # Key inside the Secret
+              name: pm-secrets     # Kubernetes Secret containing the password
+              key: POSTGRES_PASSWORD
 
+        # Mount volumes into the container
         volumeMounts:
-        # Mount PVC to Postgres data directory so data persists across restarts
         - name: db-storage
-          mountPath: /var/lib/postgresql/data
+          mountPath: /var/lib/postgresql/data   # Where Postgres stores data (persisted via PVC)
 
-        # Mount init SQL from ConfigMap into Postgres init directory
-        # Postgres automatically runs *.sql files in /docker-entrypoint-initdb.d/
-        # ONLY when the database is first created (empty data directory).
+        # Mount init.sql into the Postgres init directory
+        # NOTE: Postgres runs scripts in /docker-entrypoint-initdb.d ONLY on FIRST init
         - name: db-init
-          mountPath: /docker-entrypoint-initdb.d/init.sql  # File path inside container
-          subPath: init.sql                                # Use the init.sql key from the ConfigMap
+          mountPath: /docker-entrypoint-initdb.d/init.sql
+          subPath: init.sql
           readOnly: true
 
-        # Readiness probe:
-        # Checks if Postgres is accepting TCP connections on 5432.
-        # If not ready, other services should not send traffic yet.
+        # Readiness probe: pod is "ready" when it can accept connections on 5432
         readinessProbe:
           tcpSocket:
             port: 5432
-          initialDelaySeconds: 5   # Wait 5s before starting checks
-          periodSeconds: 5         # Check every 5s
+          initialDelaySeconds: 5
+          periodSeconds: 5
 
-        # Liveness probe:
-        # If Postgres stops responding, Kubernetes restarts the container.
+        # Liveness probe: restart container if Postgres becomes unresponsive
         livenessProbe:
           tcpSocket:
             port: 5432
-          initialDelaySeconds: 15  # Wait longer before restarting checks
-          periodSeconds: 10        # Check every 10s
+          initialDelaySeconds: 15
+          periodSeconds: 10
 
       volumes:
-      # Connect the db-storage volume name to the PVC we created above
       - name: db-storage
         persistentVolumeClaim:
-          claimName: db-pvc
-
-      # Connect db-init volume name to the ConfigMap containing init.sql
+          claimName: db-pvc         # PVC providing persistent storage
       - name: db-init
         configMap:
-          name: db-init-sql
-
+          name: db-init-sql         # ConfigMap containing init.sql
 ---
-# -----------------------------
-# Service: provides a stable internal DNS name "db" for Postgres
-# Other Pods can connect using: db:5432 (within the same namespace).
-# -----------------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: db                    # Service name (DNS: db.pm.svc.cluster.local)
+  name: db                         # Internal DNS name: db.pm.svc.cluster.local
   namespace: pm
 spec:
   selector:
-    app: db                   # Routes traffic to Pods labeled app=db
+    app: db                        # Routes traffic to pods labeled app=db
   ports:
-  - port: 5432                # Service port (clients connect to this)
-    targetPort: 5432          # Forward to container port 5432
-  type: ClusterIP             # Internal-only access (no external exposure)
+  - port: 5432                     # Service port inside cluster
+    targetPort: 5432               # Container port
+  type: ClusterIP                  # Internal-only service

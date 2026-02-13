@@ -1,19 +1,43 @@
+# -----------------------------
+# ConfigMap: stores the SQL script used to initialize the database schema
+# This is usually mounted into the Postgres container under /docker-entrypoint-initdb.d/
+# so Postgres runs it automatically on FIRST startup (when DB is empty).
+# -----------------------------
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: db-init-sql
+  name: db-init-sql              # ConfigMap name (referenced by the DB Deployment/StatefulSet)
   namespace: pm
 data:
-  init.sql: "-- services/db/init.sql\n\nCREATE TABLE IF NOT EXISTS predictions (\n\
-    \    id SERIAL PRIMARY KEY,\n    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n\
-    \n    -- Raw payloads (always keep these)\n    request_json JSONB NOT NULL,\n\
-    \    response_json JSONB NOT NULL,\n\n    -- Input features (easy querying + dashboards)\n\
-    \    type TEXT,\n    air_temperature_c DOUBLE PRECISION,\n    process_temperature_c\
-    \ DOUBLE PRECISION,\n    rotational_speed_rpm DOUBLE PRECISION,\n    torque_nm\
-    \ DOUBLE PRECISION,\n    tool_wear_min DOUBLE PRECISION,\n\n    -- Prediction\
-    \ outputs (easy querying)\n    failure_probability DOUBLE PRECISION,\n    predicted_label\
-    \ INTEGER,\n    risk_level TEXT,\n    model_path TEXT\n);\n\n-- Helpful indexes\n\
-    CREATE INDEX IF NOT EXISTS idx_predictions_created_at ON predictions (created_at\
-    \ DESC);\nCREATE INDEX IF NOT EXISTS idx_predictions_label ON predictions (predicted_label);\n\
+  # init.sql is the filename key. When mounted, it becomes a file named init.sql.
+  init.sql: "-- services/db/init.sql\n\n\
+    -- Create a table to store prediction requests + results\n\
+    CREATE TABLE IF NOT EXISTS predictions (\n\
+        id SERIAL PRIMARY KEY,                               -- Unique record ID\n\
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),        -- Timestamp when saved\n\
+    \n\
+        -- Raw payloads (always keep these)\n\
+        request_json JSONB NOT NULL,                          -- Full input request payload\n\
+        response_json JSONB NOT NULL,                         -- Full model response payload\n\
+    \n\
+        -- Input features (duplicated into columns for easy SQL filtering/analytics)\n\
+        type TEXT,                                            -- Product/type category\n\
+        air_temperature_c DOUBLE PRECISION,                    -- Air temperature in °C\n\
+        process_temperature_c DOUBLE PRECISION,                -- Process temperature in °C\n\
+        rotational_speed_rpm DOUBLE PRECISION,                 -- Rotational speed (RPM)\n\
+        torque_nm DOUBLE PRECISION,                            -- Torque (Nm)\n\
+        tool_wear_min DOUBLE PRECISION,                        -- Tool wear (minutes)\n\
+    \n\
+        -- Prediction outputs (easy querying)\n\
+        failure_probability DOUBLE PRECISION,                  -- Probability model outputs\n\
+        predicted_label INTEGER,                               -- Predicted class (e.g., 0/1)\n\
+        risk_level TEXT,                                       -- Human-friendly risk category\n\
+        model_path TEXT                                        -- Which model file/version was used\n\
+    );\n\
+    \n\
+    -- Helpful indexes for common queries (faster filtering/sorting)\n\
+    CREATE INDEX IF NOT EXISTS idx_predictions_created_at ON predictions (created_at DESC);\n\
+    CREATE INDEX IF NOT EXISTS idx_predictions_label ON predictions (predicted_label);\n\
     CREATE INDEX IF NOT EXISTS idx_predictions_risk ON predictions (risk_level);\n\
-    CREATE INDEX IF NOT EXISTS idx_predictions_type ON predictions (type);\n"
+    CREATE INDEX IF NOT EXISTS idx_predictions_type ON predictions (type);\n\
+    "

@@ -1,55 +1,75 @@
+# -----------------------------
+# Deployment: runs the dashboard UI at Streamlit as a managed Pod
+# -----------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dashboard
-  namespace: pm
+  name: dashboard                 # Name of the Deployment
+  namespace: pm                   # Deploy into the pm namespace
 spec:
-  replicas: 1
+  replicas: 3                     # Number of dashboard Pods to run
   selector:
     matchLabels:
-      app: dashboard
+      app: dashboard              # Must match the Pod label below
   template:
     metadata:
       labels:
-        app: dashboard
+        app: dashboard            # Label used by Service selector
     spec:
       containers:
-      - name: dashboard
-        image: docker.io/kaykit/pm-dashboard:v1
-        imagePullPolicy: Always
+      - name: dashboard           # Container name inside the Pod
+        image: pm-dashboard:v1   # Dashboard image (Streamlit app)
+        imagePullPolicy: Always   # Always pull latest tag version from registry
         ports:
-        - containerPort: 8501
+        - containerPort: 8501     # Streamlit default port inside container
+
+        # Load ALL non-secret environment variables from pm-config ConfigMap
         envFrom:
         - configMapRef:
             name: pm-config
+
+        # Load sensitive environment variable from Kubernetes Secret (pm-secrets)
+        # This keeps DB credentials out of ConfigMaps and YAML repo history
         env:
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: pm-secrets
-              key: DATABASE_URL
+              name: pm-secrets    # Secret resource name
+              key: DATABASE_URL   # Key inside the Secret
+
+        # Readiness probe:
+        # Pod is marked "Ready" only when the Streamlit health endpoint responds OK.
+        # If not ready, Service will not route traffic to it.
         readinessProbe:
           httpGet:
-            path: /_stcore/health
+            path: /_stcore/health # Streamlit internal health endpoint
             port: 8501
-          initialDelaySeconds: 10
-          periodSeconds: 10
+          initialDelaySeconds: 10 # Wait 10s before first readiness check
+          periodSeconds: 10       # Check every 10s
+
+        # Liveness probe:
+        # If the app gets stuck and stops responding, Kubernetes will restart the container.
         livenessProbe:
           httpGet:
             path: /_stcore/health
             port: 8501
-          initialDelaySeconds: 30
-          periodSeconds: 20
+          initialDelaySeconds: 30 # Give more startup time before liveness checks
+          periodSeconds: 20       # Check every 20s
+
 ---
+# -----------------------------
+# Service: internal stable access to dashboard Pods via DNS name "dashboard"
+# (ClusterIP = only reachable inside the cluster unless port-forward/ingress used)
+# -----------------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: dashboard
+  name: dashboard                 # Service name (DNS: dashboard.pm.svc.cluster.local)
   namespace: pm
 spec:
   selector:
-    app: dashboard
+    app: dashboard                # Routes traffic to Pods with this label
   ports:
-  - port: 8501
-    targetPort: 8501
-  type: ClusterIP
+  - port: 8501                    # Service port
+    targetPort: 8501              # Container port to forward to
+  type: ClusterIP                 # Internal-only access (use port-forward or Ingress for external)

@@ -1,14 +1,25 @@
+# -----------------------------
+# ConfigMap: stores non-sensitive configuration values (key/value pairs)
+# Other Pods can load these as environment variables using envFrom
+# -----------------------------
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: pm-config
-  namespace: pm
+  name: pm-config                 # ConfigMap name (referenced by Deployments)
+  namespace: pm                   # Namespace where this ConfigMap lives
 data:
-  INFERENCE_URL: http://inference:8000/predict
-  INFERENCE_HEALTH_URL: http://inference:8000/health
-  LOGGER_HEALTH_URL: http://logger:8001/health
-  BATCH_PREDICT_URL: http://batch-predict:8002/predict-file
-  BATCH_PREDICT_HEALTH_URL: http://batch-predict:8002/health
-  TRAINER_URL: http://trainer:8003/train
-  TRAINER_HEALTH_URL: http://trainer:8003/health
-  LOGGER_URL: http://logger:8001/log
+  # -------- Inference Service (model prediction API) --------
+  INFERENCE_URL: http://inference:8000/predict        # Main prediction endpoint
+  INFERENCE_HEALTH_URL: http://inference:8000/health  # Health check endpoint
+
+  # -------- Logger Service (stores requests/results) --------
+  LOGGER_URL: http://logger:8001/log                  # Endpoint to send logs
+  LOGGER_HEALTH_URL: http://logger:8001/health        # Health check endpoint
+
+  # -------- Batch Predict Service (predict from uploaded file/dataset) --------
+  BATCH_PREDICT_URL: http://batch-predict:8002/predict-file   # Batch prediction endpoint
+  BATCH_PREDICT_HEALTH_URL: http://batch-predict:8002/health  # Health check endpoint
+
+  # -------- Trainer Service (retrain a new model) --------
+  TRAINER_URL: http://trainer:8003/train              # Training trigger endpoint
+  TRAINER_HEALTH_URL: http://trainer:8003/health      # Health check endpoint

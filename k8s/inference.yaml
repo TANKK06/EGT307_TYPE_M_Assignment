@@ -1,77 +1,120 @@
+# -----------------------------
+# Deployment: runs the inference API (serves predictions) as a managed Pod
+# Also mounts a PVC to store the trained model file so it persists across restarts.
+# Includes an initContainer to "seed" the model into the PVC if it doesn't exist yet.
+# -----------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: inference
-  namespace: pm
+  name: inference                  # Deployment name
+  namespace: pm                    # Namespace to deploy into
 spec:
-  replicas: 1
+  replicas: 1                      # Start with 1 Pod (HPA can scale this up/down later)
   selector:
     matchLabels:
-      app: inference
+      app: inference               # Must match Pod template labels
   template:
     metadata:
       labels:
-        app: inference
+        app: inference             # Label used by Service + HPA target
     spec:
       containers:
-      - name: inference
-        image: docker.io/kaykit/pm-inference:v1
-        imagePullPolicy: Always
+      - name: inference            # Main inference container
+        image: pm-inference:v1   # Image containing inference API code
+        imagePullPolicy: Always    # Always pull image (good for dev; slower)
         ports:
-        - containerPort: 8000
+        - containerPort: 8000      # API listens on port 8000 inside container
+
+        # Load non-secret env vars (service URLs, etc.) from ConfigMap
         envFrom:
         - configMapRef:
             name: pm-config
+
+        # Readiness probe:
+        # Pod becomes "Ready" only when /health responds OK.
+        # Service will only send traffic to Ready Pods.
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 5
+          initialDelaySeconds: 5   # Wait 5s before first check
+          periodSeconds: 5         # Check every 5s
+
+        # Liveness probe:
+        # If /health stops responding, Kubernetes restarts the container.
         livenessProbe:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 15
-          periodSeconds: 10
+          initialDelaySeconds: 15  # Wait longer before liveness checks
+          periodSeconds: 10        # Check every 10s
+
+        # Resource requests/limits:
+        # Requests are used by the scheduler + HPA (HPA uses CPU % of requested CPU).
         resources:
           requests:
-            cpu: 100m
-            memory: 256Mi
+            cpu: 100m              # Requests 0.1 CPU
+            memory: 256Mi          # Requests 256Mi RAM
           limits:
-            cpu: 500m
-            memory: 512Mi
+            cpu: 500m              # Can use up to 0.5 CPU
+            memory: 512Mi          # Can use up to 512Mi RAM
+
+        # MODEL_PATH tells the app where to load the model file from
         env:
         - name: MODEL_PATH
           value: /app/model_store/best_model.joblib
+
+        # Mount the PVC to /app/model_store so model persists across restarts
         volumeMounts:
         - name: model-storage
           mountPath: /app/model_store
+
+      # Volumes section: defines the PVC used by the Pod
       volumes:
       - name: model-storage
         persistentVolumeClaim:
-          claimName: model-pvc
+          claimName: model-pvc      # PVC that holds best_model.joblib
+
+      # initContainers run BEFORE the main container starts
+      # This initContainer seeds the model into the PVC if the file is missing.
       initContainers:
       - name: seed-model
         image: docker.io/kaykit/pm-inference:v1
         imagePullPolicy: Always
+
+        # Shell script logic:
+        # - If model file doesn't exist in PVC, copy it from image's bundled model folder
+        # - If it already exists, do nothing (keeps the current model)
         command:
         - sh
         - -c
-        - if [ ! -f /app/model_store/best_model.joblib ]; then echo 'Seeding model into PVC'; cp -v /app/model/best_model.joblib /app/model_store/best_model.joblib; else echo 'Model already present'; fi
+        - >
+          if [ ! -f /app/model_store/best_model.joblib ]; then
+            echo 'Seeding model into PVC';
+            cp -v /app/model/best_model.joblib /app/model_store/best_model.joblib;
+          else
+            echo 'Model already present';
+          fi
+
+        # Mount the same PVC so the initContainer can write the model file into it
         volumeMounts:
         - name: model-storage
           mountPath: /app/model_store
+
 ---
+# -----------------------------
+# Service: stable internal DNS name "inference" for the inference API
+# Other services call: http://inference:8000 داخل cluster (same namespace).
+# -----------------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: inference
+  name: inference                 # Service name (DNS: inference.pm.svc.cluster.local)
   namespace: pm
 spec:
   selector:
-    app: inference
+    app: inference                # Routes traffic to Pods with label app=inference
   ports:
-  - port: 8000
-    targetPort: 8000
-  type: ClusterIP
+  - port: 8000                    # Service port
+    targetPort: 8000              # Container port
+  type: ClusterIP                 # Internal-only service

@@ -1,55 +1,74 @@
+# -----------------------------
+# Deployment: runs the logger service (stores requests + predictions into DB)
+# -----------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: logger
-  namespace: pm
+  name: logger                    # Deployment name
+  namespace: pm                    # Deploy into pm namespace
 spec:
-  replicas: 1
+  replicas: 1                      # 1 instance is usually enough for logging (can scale if needed)
   selector:
     matchLabels:
-      app: logger
+      app: logger                  # Must match Pod template labels
   template:
     metadata:
       labels:
-        app: logger
+        app: logger                # Label used by Service selector
     spec:
       containers:
-      - name: logger
-        image: docker.io/kaykit/pm-logger:v1
-        imagePullPolicy: Always
+      - name: logger               # Container name
+        image: pm-logger:v1   # Logger service Docker image
+        imagePullPolicy: Always    # Always pull image from registry
         ports:
-        - containerPort: 8001
+        - containerPort: 8001      # App listens on port 8001 inside container
+
+        # Load non-secret environment variables (service URLs) from ConfigMap
         envFrom:
         - configMapRef:
             name: pm-config
+
+        # Load sensitive DB connection string from Secret (pm-secrets)
         env:
         - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
-              name: pm-secrets
-              key: DATABASE_URL
+              name: pm-secrets     # Secret containing DB credentials/URL
+              key: DATABASE_URL    # Key in Secret
+
+        # Readiness probe:
+        # Pod becomes Ready only when /health returns OK.
+        # If not Ready, Service will not send traffic to it.
         readinessProbe:
           httpGet:
             path: /health
             port: 8001
-          initialDelaySeconds: 5
-          periodSeconds: 5
+          initialDelaySeconds: 5   # Wait 5s before first readiness check
+          periodSeconds: 5         # Check every 5s
+
+        # Liveness probe:
+        # If /health stops responding, Kubernetes restarts the container.
         livenessProbe:
           httpGet:
             path: /health
             port: 8001
-          initialDelaySeconds: 15
-          periodSeconds: 10
+          initialDelaySeconds: 15  # Wait longer before liveness checks
+          periodSeconds: 10        # Check every 10s
+
 ---
+# -----------------------------
+# Service: stable internal DNS name "logger" for other Pods to call
+# Example: http://logger:8001/health or http://logger:8001/log
+# -----------------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: logger
+  name: logger                    # Service name (DNS: logger.pm.svc.cluster.local)
   namespace: pm
 spec:
   selector:
-    app: logger
+    app: logger                   # Routes traffic to Pods with label app=logger
   ports:
-  - port: 8001
-    targetPort: 8001
-  type: ClusterIP
+  - port: 8001                    # Service port
+    targetPort: 8001              # Forward to container port 8001
+  type: ClusterIP                 # Internal-only service (not exposed externally)

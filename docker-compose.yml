@@ -1,4 +1,18 @@
+# docker-compose.yml
+# Runs the full Predictive Maintenance system locally with Docker Compose.
+# Services:
+#   - db: Postgres database (stores prediction logs)
+#   - logger: receives logs from inference and inserts into Postgres
+#   - inference: loads ML model and serves /predict
+#   - batch-predict: upload CSV -> calls inference per row -> returns predictions CSV
+#   - trainer: upload CSV -> retrain model -> save to shared model store -> triggers inference reload
+#   - dashboard: Streamlit UI for single predict, logs, batch predict, training, status
+
+
 services:
+  # -----------------------------
+  # Postgres database
+  # -----------------------------
   db:
     image: postgres:16
     container_name: pm_db
@@ -7,35 +21,49 @@ services:
       POSTGRES_USER: pm_user
       POSTGRES_PASSWORD: pm_pass
     ports:
-    - 5432:5432
+      - 5432:5432
     volumes:
-    - pm_db_data:/var/lib/postgresql/data
-    - ./services/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # Persistent storage for Postgres data
+      - pm_db_data:/var/lib/postgresql/data
+      # Runs once on first init: creates table + indexes
+      - ./services/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
+      # Wait until DB is ready to accept connections
       test:
-      - CMD-SHELL
-      - pg_isready -U pm_user -d pm_db
+        - CMD-SHELL
+        - pg_isready -U pm_user -d pm_db
       interval: 5s
       timeout: 5s
       retries: 20
 
+  # -----------------------------
+  # Logger service (FastAPI)
+  # -----------------------------
   logger:
     build: ./services/logger
     container_name: pm_logger
     environment:
+      # Connect to Postgres using compose network hostname "db"
       DATABASE_URL: postgresql://pm_user:pm_pass@db:5432/pm_db
     depends_on:
+      # Start only when DB is healthy
       db:
         condition: service_healthy
     ports:
-    - 8001:8001
-    image: kaykit/pm-logger:v1
+      - 8001:8001
+    # Local image name (no Docker Hub namespace)
+    image: pm-logger:v1
 
+  # -----------------------------
+  # Inference API (FastAPI + ML model)
+  # -----------------------------
   inference:
     build: ./services/inference-api
     container_name: pm_inference
     environment:
+      # Where inference sends logs (logger service)
       LOGGER_URL: http://logger:8001/log
+      # Load model from shared volume so trainer can update it
       MODEL_PATH: /app/model_store/best_model.joblib
     depends_on:
       db:
@@ -43,49 +71,68 @@ services:
       logger:
         condition: service_started
     ports:
-    - 8000:8000
-    image: kaykit/pm-inference:v1
+      - 8000:8000
+    image: pm-inference:v1
     volumes:
-    - pm_model_store:/app/model_store
+      # Shared model storage (trainer writes, inference reads)
+      - pm_model_store:/app/model_store
 
+  # -----------------------------
+  # Batch prediction service (FastAPI)
+  # -----------------------------
   batch-predict:
     build:
       context: .
       dockerfile: services/batch-predict/Dockerfile
     container_name: pm_batch_predict
     environment:
+      # Calls inference using compose network hostname "inference"
       INFERENCE_URL: http://inference:8000/predict
     depends_on:
       inference:
         condition: service_started
     ports:
-    - 8002:8002
-    image: kaykit/pm-batch-predict:v1
+      - 8002:8002
+    image: pm-batch-predict:v1
 
+  # -----------------------------
+  # Trainer service (FastAPI + training pipeline)
+  # -----------------------------
   trainer:
     build:
       context: .
       dockerfile: services/trainer/Dockerfile
     container_name: pm_trainer
     environment:
-      PYTHONPATH: /app/model
+      # Must include /app/model/src so "from config import Config" works
+      PYTHONPATH: /app/model/src
+      # Where training pipeline writes artifacts during training
       ARTIFACT_DIR: /app/model/artifacts
+      # Shared model store where trainer copies best_model.joblib
       MODEL_STORE: /app/model_store
     volumes:
-    - ./model/artifacts:/app/model/artifacts
-    - pm_model_store:/app/model_store
+      # Optional: keep artifacts on your host for inspection
+      - ./model/artifacts:/app/model/artifacts
+      # Shared volume with inference for the final model file
+      - pm_model_store:/app/model_store
     depends_on:
       db:
         condition: service_healthy
     ports:
-    - 8003:8003
-    image: kaykit/pm-trainer:v1
+      - 8003:8003
+    image: pm-trainer:v1
 
+  # -----------------------------
+  # Dashboard UI (Streamlit)
+  # -----------------------------
   dashboard:
     build: ./services/dashboard
     container_name: pm_dashboard
     environment:
+      # DB used for reading logs
       DATABASE_URL: postgresql://pm_user:pm_pass@db:5432/pm_db
+
+      # Service endpoints inside compose network
       INFERENCE_URL: http://inference:8000/predict
       INFERENCE_HEALTH_URL: http://inference:8000/health
       LOGGER_HEALTH_URL: http://logger:8001/health
@@ -99,9 +146,16 @@ services:
       batch-predict:
         condition: service_started
     ports:
-    - 8501:8501
-    image: kaykit/pm-dashboard:v1
+      # Open http://localhost:8501
+      - 8501:8501
+    image: pm-dashboard:v1
 
+# -----------------------------
+# Named volumes (persistent storage managed by Docker)
+# -----------------------------
 volumes:
+  # Persistent Postgres data volume
   pm_db_data: null
+
+  # Shared model storage between trainer and inference
   pm_model_store: {}

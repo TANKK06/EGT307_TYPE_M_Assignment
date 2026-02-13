@@ -1,16 +1,26 @@
+# -----------------------------
+# Ingress: exposes HTTP routes from outside the cluster to internal Services
+# Here, it routes all traffic ("/") to the dashboard Service on port 8501.
+# NOTE: An Ingress Controller (e.g., NGINX Ingress) must be installed for this to work.
+# -----------------------------
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: pm-ingress
-  namespace: pm
+  name: pm-ingress                 # Name of the Ingress resource
+  namespace: pm                    # Namespace where this Ingress lives
 spec:
   rules:
+  # No "host" specified:
+  # This means it will match requests sent to the Ingress controller's IP
+  # regardless of hostname (useful for local/minikube/testing).
   - http:
       paths:
+      # Path-based routing rule:
+      # Any request starting with "/" will be forwarded to the dashboard Service.
       - path: /
-        pathType: Prefix
+        pathType: Prefix           # Prefix match: "/" matches everything under it (/, /abc, /xyz)
         backend:
           service:
-            name: dashboard
+            name: dashboard        # Target Kubernetes Service name
             port:
-              number: 8501
+              number: 8501         # Target Service port (dashboard listens on 8501)

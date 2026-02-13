@@ -1,49 +1,66 @@
+# -----------------------------
+# Deployment: runs the batch-predict application as a Pod (managed by a Deployment)
+# -----------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: batch-predict
-  namespace: pm
+  name: batch-predict          # Name of the Deployment resource
+  namespace: pm                # Namespace where this app is deployed (pm namespace)
 spec:
-  replicas: 1
+  replicas: 3                  # Number of Pod copies to run (1 = single instance)
   selector:
     matchLabels:
-      app: batch-predict
+      app: batch-predict       # Must match the label in template.metadata.labels
   template:
     metadata:
       labels:
-        app: batch-predict
+        app: batch-predict     # Label applied to Pods (used by Service selector + Deployment)
     spec:
       containers:
-      - name: batch-predict
-        image: docker.io/kaykit/pm-batch-predict:v1
-        imagePullPolicy: Always
+      - name: batch-predict    # Container name inside the Pod
+        image: pm-batch-predict:v1   # Docker image to pull and run
+        imagePullPolicy: Always # Always pull the image (useful during development; slower)
         ports:
-        - containerPort: 8002
+        - containerPort: 8002  # The port the app listens on INSIDE the container
+
+        # Load environment variables from ConfigMap "pm-config"
+        # This avoids hardcoding settings like DB_HOST, MODEL_PATH, etc in YAML
         envFrom:
         - configMapRef:
             name: pm-config
+
+        # Readiness probe:
+        # Kubernetes only sends traffic to this Pod when /health returns success.
+        # If readiness fails, Pod stays running but is removed from Service endpoints.
         readinessProbe:
           httpGet:
             path: /health
             port: 8002
-          initialDelaySeconds: 5
-          periodSeconds: 5
+          initialDelaySeconds: 5  # Wait 5s after container starts before checking
+          periodSeconds: 5        # Check every 5s
+
+        # Liveness probe:
+        # If /health fails repeatedly, Kubernetes restarts the container (assumes it's stuck/crashed).
         livenessProbe:
           httpGet:
             path: /health
             port: 8002
-          initialDelaySeconds: 15
-          periodSeconds: 10
+          initialDelaySeconds: 15 # Wait longer before liveness checks (app needs time to start)
+          periodSeconds: 10       # Check every 10s
+
 ---
+# -----------------------------
+# Service: stable internal DNS name + load-balancing to Pods
+# -----------------------------
 apiVersion: v1
 kind: Service
 metadata:
-  name: batch-predict
+  name: batch-predict         # Service name (DNS will be batch-predict.pm.svc.cluster.local)
   namespace: pm
 spec:
   selector:
-    app: batch-predict
+    app: batch-predict        # Routes traffic to Pods with this label
   ports:
-  - port: 8002
-    targetPort: 8002
-  type: ClusterIP
+  - port: 8002                # Service port (what other Pods use to access)
+    targetPort: 8002          # Container port traffic is forwarded to
+  type: ClusterIP             # Internal-only service (NOT accessible from outside the cluster)

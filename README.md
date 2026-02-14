@@ -20,27 +20,26 @@ Step 1: Clone the Repository
 git clone https://github.com/TANKK06/EGT307_TYPE_M_Assignment.git
 cd <repository-folder>
 
-# =========================
+ =========================
 # run locally
-# =========================
-# 1) Start Minikube
-# =========================
+ =========================
+ 1) Start Minikube
+ =========================
 minikube delete
 minikube start
 
-# =========================
-# 2) Enable addons (Ingress + Metrics for HPA)
-# =========================
+ =========================
+ 2) Enable addons (Ingress + Metrics for HPA)
+ =========================
 minikube addons enable ingress
 minikube addons enable metrics-server
 
-# (Optional) verify addons pods
+ verify addons pods
 kubectl get pods -n kube-system
 
-# =========================
-# 3) Build Docker images INSIDE Minikube
-#    (so K8s can use them without docker push)
-# =========================
+ =========================
+ 3) Build Docker images INSIDE Minikube#   (so K8s can use them without docker push)
+ =========================
 eval $(minikube -p minikube docker-env)
 
 docker build -t docker.io/kaykit/pm-logger:v1 ./services/logger
@@ -49,65 +48,65 @@ docker build -t docker.io/kaykit/pm-dashboard:v1 ./services/dashboard
 docker build -t docker.io/kaykit/pm-batch-predict:v1 -f services/batch-predict/Dockerfile .
 docker build -t docker.io/kaykit/pm-trainer:v1 -f services/trainer/Dockerfile .
 
-# Confirm images exist in Minikube docker
+Confirm images exist in Minikube docker
 docker images | grep pm-
 
-# =========================
-# 4) Apply Kubernetes manifests
-# =========================
+ =========================
+ 4) Apply Kubernetes manifests
+ =========================
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/
 
-# =========================
-# 5) Watch your pods come up
-# =========================
+ =========================
+ 5) Watch your pods come up
+ =========================
 kubectl get pods -n pm -w
 
-# =========================
-# 6) Check services + ingress
-# =========================
+ =========================
+ 6) Check services + ingress
+ =========================
 kubectl get svc -n pm
 kubectl get ingress -n pm
 kubectl get hpa -n pm
 
-# =========================
-# 7) Verify Metrics Server works (for HPA)
-# =========================
+ =========================
+ 7) Verify Metrics Server works (for HPA)
+ =========================
 kubectl top nodes
 kubectl top pods -n pm
 
-# =========================
-# 8) Open the Dashboard
-# =========================
+ =========================
+ 8) Open the Dashboard
+ =========================
 minikube service -n pm dashboard --url
 
-# =========================
-# Docker Hub
-# =========================
-# 1) Start Minikube
-# =========================
+ =========================
+ Docker Hub
+ =========================
+ 1) Start Minikube
+ =========================
 minikube delete
 minikube start
-# =========================
-# 2) Enable addons (Ingress + Metrics for HPA)
-# =========================
+ =========================
+ 2) Enable addons (Ingress + Metrics for HPA)
+ =========================
 minikube addons enable ingress
 minikube addons enable metrics-server
 
-# =========================
-# 4) Apply Kubernetes manifests
-# =========================
+ =========================
+ 4) Apply Kubernetes manifests
+ =========================
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/  
 
-# =========================
-# 5) Watch your pods come up
-# =========================
+ =========================
+ 5) Watch your pods come up
+ =========================
 kubectl get pods -n pm -w
 
-# =========================
-# 8) Open the Dashboard
-# =========================
+ =========================
+ 8) Open the Dashboard
+ =========================
 minikube service -n pm dashboard --url
 
 ## Description of Each Microservice

@@ -20,93 +20,63 @@ Step 1: Clone the Repository
 git clone https://github.com/TANKK06/EGT307_TYPE_M_Assignment.git
 cd <repository-folder>
 
- =========================
-# run locally
- =========================
- 1) Start Minikube
- =========================
+
+### run locally
+
+1) Start Minikube
 minikube delete
 minikube start
 
- =========================
- 2) Enable addons (Ingress + Metrics for HPA)
- =========================
+2) Enable addons (Ingress + Metrics for HPA)
 minikube addons enable ingress
 minikube addons enable metrics-server
 
- verify addons pods
-kubectl get pods -n kube-system
+3) Build Docker images INSIDE Minikube#   (so K8s can use them without docker push)
 
- =========================
- 3) Build Docker images INSIDE Minikube#   (so K8s can use them without docker push)
- =========================
 eval $(minikube -p minikube docker-env)
-
 docker build -t docker.io/kaykit/pm-logger:v1 ./services/logger
 docker build -t docker.io/kaykit/pm-inference:v1 ./services/inference-api
 docker build -t docker.io/kaykit/pm-dashboard:v1 ./services/dashboard
 docker build -t docker.io/kaykit/pm-batch-predict:v1 -f services/batch-predict/Dockerfile .
 docker build -t docker.io/kaykit/pm-trainer:v1 -f services/trainer/Dockerfile .
 
-Confirm images exist in Minikube docker
-docker images | grep pm-
-
- =========================
- 4) Apply Kubernetes manifests
- =========================
+4) Apply Kubernetes manifests
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/
 
- =========================
- 5) Watch your pods come up
- =========================
+5) Watch your pods come up
 kubectl get pods -n pm -w
 
- =========================
- 6) Check services + ingress
- =========================
+6) Check services + ingress
 kubectl get svc -n pm
 kubectl get ingress -n pm
 kubectl get hpa -n pm
 
- =========================
- 7) Verify Metrics Server works (for HPA)
- =========================
+7) Verify Metrics Server works (for HPA)
 kubectl top nodes
 kubectl top pods -n pm
 
- =========================
- 8) Open the Dashboard
- =========================
+8) Open the Dashboard
 minikube service -n pm dashboard --url
 
- =========================
- Docker Hub
- =========================
- 1) Start Minikube
- =========================
+### Docker Hub
+
+1) Start Minikube
 minikube delete
 minikube start
- =========================
- 2) Enable addons (Ingress + Metrics for HPA)
- =========================
+
+2) Enable addons (Ingress + Metrics for HPA)
 minikube addons enable ingress
 minikube addons enable metrics-server
 
- =========================
- 4) Apply Kubernetes manifests
- =========================
+4) Apply Kubernetes manifests
 kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/  
 
- =========================
- 5) Watch your pods come up
- =========================
+5) Watch your pods come up
 kubectl get pods -n pm -w
 
- =========================
- 8) Open the Dashboard
- =========================
+6) Open the Dashboard
 minikube service -n pm dashboard --url
 
 ## Description of Each Microservice
@@ -166,6 +136,72 @@ Failure Type : Type of Failure
 ### Dataset Source:
 AI4I 2020 Predictive Maintenance Dataset
 https://archive.ics.uci.edu/ml/datasets/AI4I+2020+Predictive+Maintenance+Dataset
+
+## Purpose of Kubernetes in This System
+1. Container Orchestration
+Kubernetes manages all microservices:
+dashboard
+inference API
+batch prediction
+trainer
+logger
+PostgreSQL
+
+It ensures each service runs correctly and communicates through internal networking.
+Without Kubernetes: services must be started manually.
+With Kubernetes: services run automatically and consistently.
+
+2. Automatic Recovery (Self-Healing)
+If a service crashes:
+Kubernetes automatically restarts the pod
+system continues running without manual intervention
+This improves system reliability and uptime.
+
+3. Scalability & Load Handling
+Kubernetes enables Horizontal Pod Autoscaling (HPA):
+increases pods when traffic increases
+reduces pods when load is low
+
+Example:
+heavy batch prediction → inference service scales up
+low usage → scales down to save resources
+This ensures efficient resource usage and performance.
+
+4. Persistent Storage for Models & Data
+A Persistent Volume Claim (PVC) is used to store:
+trained ML models
+model artifacts
+
+This ensures:
+models are not lost when pods restart
+inference always loads the latest trained model
+
+5. Service Discovery & Internal Networking
+Kubernetes provides built-in networking:
+services communicate using service names
+no need to manage IP addresses
+
+Example:
+trainer → inference reload request
+inference → logger service
+dashboard → all services
+
+This simplifies microservice communication.
+
+6. External Access via Ingress
+Ingress allows external users to access the system through a single entry point.
+Benefits:
+clean routing
+easier access management
+production-like architecture
+
+7. Production-Like Deployment Environment
+Using Kubernetes simulates real-world deployment environments used in industry.
+This improves:
+deployment reliability
+scalability testing
+fault tolerance
+maintainability
 
 ## Known Issues and Limitations
 

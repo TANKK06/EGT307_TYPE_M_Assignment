@@ -119,35 +119,54 @@ minikube service -n pm dashboard --url
 
 ### Dashboard Service
 Provides a user-friendly interface that allows users to:
+
 Submit data for real-time prediction
+
 Upload datasets for batch prediction
+
 Trigger model retraining
+
 View prediction results
+
 This service acts as the primary interaction layer between the user and the backend system.
 
 ### Inference API
 Handles prediction requests by loading the latest trained machine learning model from persistent storage.
+
 Core responsibilities:
+
 Serve real-time prediction requests
+
 Reload the model after retraining
+
 Ensure low-latency responses
 
 ### Trainer Service
 Responsible for training and updating the machine learning model.
+
 Key functions:
+
 Preprocess incoming datasets
+
 Train and evaluate the predictive model
+
 Save the best-performing model
+
 Notify the inference service to reload the updated model
 
 ### Batch Prediction Service
 Processes large datasets asynchronously and generates prediction outputs for offline analysis.
 This service is useful for organisations that require periodic evaluation of equipment health across multiple machines.
-Logger Service
+
+### Logger Service
 Captures and stores important system data, including:
+
 Prediction requests
+
 Prediction results
+
 Training activity
+
 Persistent logging improves traceability, debugging, and auditability.
 
 ## Dataset Information and Sources
@@ -158,102 +177,144 @@ Since real predictive maintenance datasets are generally difficult to obtain and
 The dataset consists of 10 000 data points stored as rows with 14 features in columns
 
 UID: unique identifier ranging from 1 to 10000
+
 productID: consisting of a letter L, M, or H for low (50% of all products), medium (30%), and high (20%) as product quality variants and a variant-specific serial number
+
 air temperature [K]: generated using a random walk process later normalized to a standard deviation of 2 K around 300 K
+
 process temperature [K]: generated using a random walk process normalized to a standard deviation of 1 K, added to the air temperature plus 10 K.
+
 rotational speed [rpm]: calculated from powepower of 2860 W, overlaid with a normally distributed noise
+
 torque [Nm]: torque values are normally distributed around 40 Nm with an Ïƒ = 10 Nm and no negative values.
+
 tool wear [min]: The quality variants H/M/L add 5/3/2 minutes of tool wear to the used tool in the process. and a
+
 'machine failure' label that indicates, whether the machine has failed in this particular data point for any of the following failure modes are true.
+
 Important : There are two Targets - Do not make the mistake of using one of them as feature, as it will lead to leakage.
+
 Target : Failure or Not
+
 Failure Type : Type of Failure
 
 ### Dataset Source:
 AI4I 2020 Predictive Maintenance Dataset
+
 https://archive.ics.uci.edu/ml/datasets/AI4I+2020+Predictive+Maintenance+Dataset
 
 ## Purpose of Kubernetes in This System
 1. Container Orchestration
+
 Kubernetes manages all microservices:
+
 dashboard
+
 inference API
+
 batch prediction
+
 trainer
+
 logger
+
 PostgreSQL
 
 It ensures each service runs correctly and communicates through internal networking.
+
 Without Kubernetes: services must be started manually.
+
 With Kubernetes: services run automatically and consistently.
 
 2. Automatic Recovery (Self-Healing)
 If a service crashes:
+
 Kubernetes automatically restarts the pod
+
 system continues running without manual intervention
+
 This improves system reliability and uptime.
 
 3. Scalability & Load Handling
 Kubernetes enables Horizontal Pod Autoscaling (HPA):
+
 increases pods when traffic increases
+
 reduces pods when load is low
 
 Example:
+
 heavy batch prediction → inference service scales up
+
 low usage → scales down to save resources
+
 This ensures efficient resource usage and performance.
 
 4. Persistent Storage for Models & Data
 A Persistent Volume Claim (PVC) is used to store:
+
 trained ML models
+
 model artifacts
 
-This ensures:
-models are not lost when pods restart
-inference always loads the latest trained model
+This ensures the models are not lost when pods restart and inference always loads the latest trained model
 
 5. Service Discovery & Internal Networking
 Kubernetes provides built-in networking:
+
 services communicate using service names
+
 no need to manage IP addresses
 
 Example:
+
 trainer → inference reload request
+
 inference → logger service
+
 dashboard → all services
 
 This simplifies microservice communication.
 
 6. External Access via Ingress
 Ingress allows external users to access the system through a single entry point.
+
 Benefits:
+
 clean routing
+
 easier access management
+
 production-like architecture
 
 7. Production-Like Deployment Environment
 Using Kubernetes simulates real-world deployment environments used in industry.
+
 This improves:
+
 deployment reliability
+
 scalability testing
+
 fault tolerance
+
 maintainability
 
 ## Known Issues and Limitations
 
 Although the system is fully functional, several limitations exist:
 
-Image Caching in Kubernetes
+1. Image Caching in Kubernetes
 When using imagePullPolicy: IfNotPresent, Kubernetes may reuse cached images even after updates. It is recommended to use versioned image tags (e.g., v1, v2) to prevent deployment inconsistencies.
 
-Dependency Consistency
+2. Dependency Consistency
 Trainer and inference services must use identical library versions. Differences may cause the inference service to fail when loading newly trained models.
 
-Resource Constraints in Minikube
+3. Resource Constraints in Minikube
 Minikube runs on local hardware and may experience performance limitations when handling large datasets or concurrent requests.
 
-Manual Retraining Trigger
+4. Manual Retraining Trigger
 Model retraining currently requires manual initiation. Future improvements could include automated retraining pipelines.
 
-Security Enhancements
+5. Security Enhancements
 Authentication and role-based access control are not implemented and should be added before production deployment.

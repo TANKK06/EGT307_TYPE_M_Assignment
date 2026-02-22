@@ -8,23 +8,33 @@ This project implements a scalable Predictive Maintenance System designed to for
 The primary objective of this project is to demonstrate how modern cloud-native technologies can be integrated with machine learning workflows to support real-time predictions, batch processing, and continuous model retraining.
 
 Key objectives include:
+
 Develop a machine learning model capable of predicting equipment failures.
+
 Design independent microservices to support modular system architecture.
+
 Enable real-time and batch predictions through API endpoints.
+
 Support automated model retraining using newly uploaded datasets.
+
 Deploy the system using Docker for containerisation and Kubernetes for orchestration.
+
 Ensure system logs and prediction records are persistently stored.
 
 ## Instructions to Build, Run, and Deploy the System
 Step 1: Clone the Repository
+
 git clone https://github.com/TANKK06/EGT307_TYPE_M_Assignment.git
+
 cd <repository-folder>
 
 
 ### run locally
 
 1) Start Minikube
+
 minikube delete
+
 minikube start
 
 2) Enable addons (Ingress + Metrics for HPA)

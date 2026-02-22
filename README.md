@@ -305,16 +305,21 @@ maintainability
 Although the system is fully functional, several limitations exist:
 
 1. Image Caching in Kubernetes
+
 When using imagePullPolicy: IfNotPresent, Kubernetes may reuse cached images even after updates. It is recommended to use versioned image tags (e.g., v1, v2) to prevent deployment inconsistencies.
 
 2. Dependency Consistency
+
 Trainer and inference services must use identical library versions. Differences may cause the inference service to fail when loading newly trained models.
 
 3. Resource Constraints in Minikube
+
 Minikube runs on local hardware and may experience performance limitations when handling large datasets or concurrent requests.
 
 4. Manual Retraining Trigger
+
 Model retraining currently requires manual initiation. Future improvements could include automated retraining pipelines.
 
 5. Security Enhancements
+
 Authentication and role-based access control are not implemented and should be added before production deployment.
